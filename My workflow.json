@@ -1,0 +1,443 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Claim Denial Fighter",
+        "formDescription": "Paste a fake insurance denial letter below. Sample data only",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Denial Letter Text",
+              "fieldType": "textarea",
+              "fieldName": "Denial Letter Text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -368,
+        176
+      ],
+      "id": "b723750f-1bf1-4ddb-9171-538b127a6c91",
+      "name": "On form submission",
+      "webhookId": "07df9eae-8732-4d31-8964-95f5c5ffa75f"
+    },
+    {
+      "parameters": {
+        "promptType": "=define",
+        "text": "=Extract the following fields from this insurance denial letter and return JSON only, with no extra text or code fences.\n\nFields: claim_id, member_id, payer, service_date, cpt_code, procedure, diagnosis, billed_amount, denial_code, denial_reason, appeal_deadline_days.\n\nIf a field is missing, use null.\n\nLetter:\n{{ $json['Denial Letter Text'] }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -272,
+        -192
+      ],
+      "id": "e6fb1298-4c71-4a8e-b661-b2ea9280f068",
+      "name": "Basic LLM Chain",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        -192,
+        -32
+      ],
+      "id": "bd86be57-098b-4031-88cc-a8f7b12e26a5",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "pq7DpHegLbiz21yb",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.text || '';\nconst cleaned = raw.replace(/```json|```/g, '').trim();\n\nlet data;\ntry {\n  data = JSON.parse(cleaned);\n} catch (e) {\n  return [{ json: { error: 'Could not parse AI output', raw } }];\n}\n\nconst rules = {\n  'CO-197': { category: 'Missing prior authorization', preventable: 'Yes', fix_tip: 'Get prior authorization before the service is performed.' },\n  'CO-16':  { category: 'Missing or incorrect information', preventable: 'Yes', fix_tip: 'Check all claim fields and attachments before submitting.' },\n  'CO-18':  { category: 'Duplicate claim', preventable: 'Yes', fix_tip: 'Check for an existing claim before resubmitting.' },\n  'CO-4':   { category: 'Coding mismatch', preventable: 'Yes', fix_tip: 'Verify the procedure code and modifier match.' },\n  'CO-29':  { category: 'Timely filing', preventable: 'Yes', fix_tip: 'Submit claims within the payer filing deadline.' },\n  'CO-242': { category: 'Out-of-network provider', preventable: 'No', fix_tip: 'Verify network status before the visit.' },\n  'CO-50':  { category: 'Not medically necessary', preventable: 'No', fix_tip: 'Appeal with supporting clinical documentation.' }\n};\n\nconst info = rules[data.denial_code] || {\n  category: 'Other',\n  preventable: 'Unknown',\n  fix_tip: 'Review the denial reason manually.'\n};\n\nreturn [{ json: { ...data, ...info } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        192
+      ],
+      "id": "0d2bf54d-552b-4797-9708-8d3939150d9c",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        272,
+        256
+      ],
+      "id": "523188fd-8ee6-4272-905b-5e57f494490b",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "pq7DpHegLbiz21yb",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are helping a patient or provider prepare an insurance appeal. Write a professional, polite appeal letter based only on the details below. Do not invent facts, and do not give medical or legal advice.\n\nDetails:\n- Payer: {{ $json.payer }}\n- Claim ID: {{ $json.claim_id }}\n- Member ID: {{ $json.member_id }}\n- Service date: {{ $json.service_date }}\n- Procedure: {{ $json.procedure }} (CPT {{ $json.cpt_code }})\n- Diagnosis: {{ $json.diagnosis }}\n- Billed amount: {{ $json.billed_amount }}\n- Denial code: {{ $json.denial_code }}\n- Denial reason: {{ $json.denial_reason }}\n- Denial category: {{ $json.category }}\n\nInstructions:\n1. Start with \"DRAFT - HUMAN REVIEW REQUIRED - SAMPLE DATA ONLY\".\n2. Address the letter to the payer's Appeals Department.\n3. Include the claim details, state that we are requesting reconsideration, and explain the request clearly based on the denial reason.\n4. List the supporting documents to attach (for example: medical records, provider letter, prior authorization proof if available).\n5. End with a polite closing and a placeholder for the sender's name and contact details.\n6. Keep it under 300 words.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        176,
+        112
+      ],
+      "id": "645945b6-2da7-478d-8a40-7d038d2de16e",
+      "name": "Draft Appeal",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1y_L9XmVLBrAyoDoQeAIBYrQKCLQ1fsv3axShbD5baZA",
+          "mode": "list",
+          "cachedResultName": "Claim Denial Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1y_L9XmVLBrAyoDoQeAIBYrQKCLQ1fsv3axShbD5baZA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1y_L9XmVLBrAyoDoQeAIBYrQKCLQ1fsv3axShbD5baZA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "claim_id": "={{ $('Code in JavaScript').item.json.claim_id }}",
+            "member_id": "={{ $('Code in JavaScript').item.json.member_id }}",
+            "payer": "={{ $('Code in JavaScript').item.json.payer }}",
+            "service_date": "={{ $('Code in JavaScript').item.json.service_date }}",
+            "cpt_code": "={{ $('Code in JavaScript').item.json.cpt_code }}",
+            "procedure": "={{ $('Code in JavaScript').item.json.procedure }}",
+            "diagnosis": "={{ $('Code in JavaScript').item.json.diagnosis }}",
+            "billed_amount": "={{ $('Code in JavaScript').item.json.billed_amount }}",
+            "denial_code": "={{ $('Code in JavaScript').item.json.denial_code }}",
+            "denial_reason": "={{ $('Code in JavaScript').item.json.denial_reason }}",
+            "category": "={{ $('Code in JavaScript').item.json.category }}",
+            "preventable": "={{ $('Code in JavaScript').item.json.preventable }}",
+            "fix_tip": "={{ $('Code in JavaScript').item.json.fix_tip }}",
+            "appeal_status": "=Drafted (plain text, not an expression)",
+            "appeal_draft": "={{ $json.text }}",
+            "logged_at": "={{ $now }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "claim_id",
+              "displayName": "claim_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "member_id",
+              "displayName": "member_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "payer",
+              "displayName": "payer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "service_date",
+              "displayName": "service_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "cpt_code",
+              "displayName": "cpt_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "procedure",
+              "displayName": "procedure",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "diagnosis",
+              "displayName": "diagnosis",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "billed_amount",
+              "displayName": "billed_amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "denial_code",
+              "displayName": "denial_code",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "denial_reason",
+              "displayName": "denial_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "preventable",
+              "displayName": "preventable",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "fix_tip",
+              "displayName": "fix_tip",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "appeal_status",
+              "displayName": "appeal_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "appeal_draft",
+              "displayName": "appeal_draft",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "logged_at",
+              "displayName": "logged_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        496,
+        -80
+      ],
+      "id": "2970555c-0347-4dea-b3d5-98a4c6912081",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "TQauKGTC0RzAA2Pk",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": "={{ 10 }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        80,
+        -112
+      ],
+      "id": "96802f84-4109-4668-a948-312f26b7afb5",
+      "name": "Wait",
+      "webhookId": "dddff883-a938-447a-a227-9e14d9767eb0"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Draft Appeal",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Appeal": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Draft Appeal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "ebe43e6b-4d0f-47d3-a01b-0f6f2190d7a6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f10ed1ebb88973b9e7f0b91373a5f32a785f54935ddd4c8e63a672d70f20f26a"
+  },
+  "nodeGroups": [],
+  "id": "uxv1Vrd4RUc2vXN4",
+  "tags": []
+}
