@@ -169,7 +169,7 @@ claim-denial-fighter/
 
 ## Author
 
-[Your name] | [LinkedIn profile link]
+Sheela Kasbekar | https://www.linkedin.com/feed/update/urn:li:activity:7526572247990329344/
 
 ## License
 
